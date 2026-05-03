@@ -65,8 +65,14 @@ RUN if ! getent group ${USER_GID} >/dev/null; then groupadd -g ${USER_GID} hostg
 
 COPY --chown=${USER_UID}:${USER_GID} claude-config.json /home/claude/.claude.json
 
+# entrypoint.sh marks bind-mounted tracked files (e.g. .mcp.json) as
+# skip-worktree on container start, so git status stays clean despite the
+# mount-induced divergence from HEAD.
+COPY --chown=${USER_UID}:${USER_GID} entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 USER claude
 ENV HOME=/home/claude
 WORKDIR /workspace
 
-ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
