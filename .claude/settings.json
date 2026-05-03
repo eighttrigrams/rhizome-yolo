@@ -1,5 +1,19 @@
 {
   "disabledMcpjsonServers": [
     "playwright"
-  ]
+  ],
+  "enabledPlugins": {
+    "clj-nrepl-eval@eighttrigrams": true,
+    "tools@eighttrigrams": false,
+    "editor-layouts@eighttrigrams": true,
+    "rhizome@eighttrigrams": true
+  },
+  "extraKnownMarketplaces": {
+    "eighttrigrams": {
+      "source": {
+        "source": "directory",
+        "path": "/workspace/claude-stuff"
+      }
+    }
+  }
 }

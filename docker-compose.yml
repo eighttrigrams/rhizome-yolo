@@ -10,6 +10,7 @@ services:
       - /Users/daniel/Workspace/eighttrigrams/tracker.project/tracker/files:/Users/daniel/Workspace/eighttrigrams/tracker.project/tracker/files:rw
       - ../../claude-stuff:/workspace/claude-stuff:rw
       - ../../tracker:/workspace/tracker:rw
+      - ./.claude:/workspace/.claude:rw
       - /Users/daniel/.gitconfig:/home/claude/.gitconfig:ro
       - m2_cache:/home/claude/.m2
       - npm_cache:/home/claude/.npm
