@@ -41,7 +41,7 @@ otherwise `host.docker.internal` connections will be refused.
 ## Daily use
 
 ```bash
-cd docker-rhizome
+cd docker
 ./run.sh
 # inside the container:
 make start          # JVM on :3006, shadow on :8020
