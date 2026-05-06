@@ -54,16 +54,19 @@ RUN npm install -g @anthropic-ai/claude-code \
  && printf '#!/bin/sh\nexec /usr/local/bin/claude-bin --dangerously-skip-permissions "$@"\n' > /usr/local/bin/claude \
  && chmod +x /usr/local/bin/claude
 
-RUN printf '#!/bin/sh\ncase "$1" in\n  commit|merge)\n    branch=$(/usr/bin/git rev-parse --abbrev-ref HEAD 2>/dev/null)\n    if [ "$branch" = "main" ]; then\n      echo "refusing to $1 on main from inside the container. switch to a feature branch first." >&2\n      exit 1\n    fi\n    ;;\nesac\nexec /usr/bin/git "$@"\n' > /usr/local/bin/git \
+RUN printf '#!/bin/sh\ncase "$1" in\n  push)\n    echo "git push is disabled inside the docker container." >&2\n    exit 1\n    ;;\n  commit|merge)\n    branch=$(/usr/bin/git rev-parse --abbrev-ref HEAD 2>/dev/null)\n    if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then\n      echo "refusing to $1 on $branch from inside the container. switch to a feature branch first." >&2\n      exit 1\n    fi\n    ;;\nesac\nexec /usr/bin/git "$@"\n' > /usr/local/bin/git \
  && chmod +x /usr/local/bin/git
 
 RUN if ! getent group ${USER_GID} >/dev/null; then groupadd -g ${USER_GID} hostgrp; fi \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash claude \
  && mkdir -p /home/claude/.claude /home/claude/.m2 /home/claude/.npm \
- && mkdir -p /workspace /workspace/.cpcache /workspace/.shadow-cljs /workspace/node_modules \
+ && mkdir -p /workspace \
  && chown -R ${USER_UID}:${USER_GID} /home/claude /workspace
 
 COPY --chown=${USER_UID}:${USER_GID} claude-config.json /home/claude/.claude.json
+
+RUN printf '[user]\n\tname = Claude\n\temail = claude@eighttrigrams.net\n[init]\n\tdefaultBranch = main\n' > /home/claude/.gitconfig \
+ && chown ${USER_UID}:${USER_GID} /home/claude/.gitconfig
 
 # entrypoint.sh marks bind-mounted tracked files (e.g. .mcp.json) as
 # skip-worktree on container start, so git status stays clean despite the
@@ -73,6 +76,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 USER claude
 ENV HOME=/home/claude
-WORKDIR /workspace
+WORKDIR /workspace/rhizome
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

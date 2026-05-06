@@ -11,4 +11,15 @@ fi
 export CLAUDE_CODE_OAUTH_TOKEN=$(cat "$TOKEN_FILE")
 
 cd "$SCRIPT_DIR"
-docker compose run --rm --service-ports claude
+
+EXTRA_VOLUMES=()
+PARENT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+for sibling in rhizome-books claude-stuff; do
+  host_path="$PARENT_DIR/$sibling"
+  if [ -d "$host_path" ]; then
+    echo "Mounting sibling $sibling from $host_path"
+    EXTRA_VOLUMES+=(-v "$host_path:/workspace/$sibling:rw")
+  fi
+done
+
+docker compose run --rm --service-ports "${EXTRA_VOLUMES[@]}" claude

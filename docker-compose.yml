@@ -2,23 +2,17 @@ services:
   claude:
     build: .
     volumes:
-      - ../:/workspace:rw
-      - ./config.edn:/workspace/config.edn:rw
-      - ./test_config.edn:/workspace/test/test_config.edn:rw
-      - ./e2e_config.edn:/workspace/test/e2e_config.edn:rw
-      - ./.mcp.json:/workspace/.mcp.json:rw
-      - /Users/daniel/Workspace/eighttrigrams/tracker.project/tracker/files:/Users/daniel/Workspace/eighttrigrams/tracker.project/tracker/files:rw
-      - ../../claude-stuff:/workspace/claude-stuff:rw
-      - ../../tracker:/workspace/tracker:rw
-      - ./.claude:/workspace/.claude:rw
-      - /Users/daniel/.gitconfig:/home/claude/.gitconfig:ro
+      - workspace:/workspace
+      - ../:/workspace/rhizome:rw
+      - ./.mcp.json:/workspace/rhizome/.mcp.json:rw
+      - ./.claude:/workspace/rhizome/.claude:rw
       - m2_cache:/home/claude/.m2
       - npm_cache:/home/claude/.npm
       - claude_home:/home/claude/.claude
-      - cpcache:/workspace/.cpcache
-      - shadow_cache:/workspace/.shadow-cljs
-      - node_modules:/workspace/node_modules
-    working_dir: /workspace
+      - cpcache:/workspace/rhizome/.cpcache
+      - shadow_cache:/workspace/rhizome/.shadow-cljs
+      - node_modules:/workspace/rhizome/node_modules
+    working_dir: /workspace/rhizome
     environment:
       - CLAUDE_CODE_OAUTH_TOKEN
       - PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
@@ -55,6 +49,7 @@ services:
         exec nginx -g 'daemon off;'
 
 volumes:
+  workspace:
   m2_cache:
   npm_cache:
   claude_home:
