@@ -5,7 +5,7 @@ services:
       - workspace:/workspace
       - ../:/workspace/rhizome:rw
       - ./.mcp.json:/workspace/rhizome/.mcp.json:rw
-      - ./.claude:/workspace/rhizome/.claude:rw
+      - ./.claude/settings.json:/workspace/rhizome/.claude/settings.json:rw
       - m2_cache:/home/claude/.m2
       - npm_cache:/home/claude/.npm
       - claude_home:/home/claude/.claude
