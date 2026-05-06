@@ -6,6 +6,7 @@ services:
       - ../:/workspace/rhizome:rw
       - ./.mcp.json:/workspace/rhizome/.mcp.json:rw
       - ./.claude/settings.json:/workspace/rhizome/.claude/settings.json:rw
+      - ./package-lock.json:/workspace/rhizome/package-lock.json:rw
       - m2_cache:/home/claude/.m2
       - npm_cache:/home/claude/.npm
       - claude_home:/home/claude/.claude
@@ -18,6 +19,7 @@ services:
       - PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
       - SQLITE_VEC_PATH=/usr/local/lib/sqlite-vec/vec0
       - OLLAMA_URL=http://ollama-proxy:11434
+      - RHIZOME_BIND_ALL=1
     depends_on:
       - ollama-proxy
     extra_hosts:

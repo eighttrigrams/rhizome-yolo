@@ -12,6 +12,13 @@ export CLAUDE_CODE_OAUTH_TOKEN=$(cat "$TOKEN_FILE")
 
 cd "$SCRIPT_DIR"
 
+# Seed a container-private package-lock.json the first time, so npm install
+# inside the container doesn't rewrite the host's lockfile through the
+# rhizome bind-mount. Subsequent runs reuse whatever the container wrote.
+if [ ! -f package-lock.json ] && [ -f ../package-lock.json ]; then
+  cp ../package-lock.json package-lock.json
+fi
+
 EXTRA_VOLUMES=()
 PARENT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 for sibling in rhizome-books claude-stuff; do
