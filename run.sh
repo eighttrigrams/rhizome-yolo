@@ -41,4 +41,6 @@ for sibling in rhizome-books claude-stuff; do
   fi
 done
 
+export WITH_VEC="${WITH_VEC:-0}"
+docker compose build claude
 docker compose run --rm --service-ports "${EXTRA_VOLUMES[@]}" claude

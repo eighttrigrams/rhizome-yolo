@@ -1,6 +1,10 @@
 services:
   claude:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.yolo
+      args:
+        WITH_VEC: "${WITH_VEC:-0}"
     volumes:
       - workspace:/workspace
       - ../:/workspace/rhizome:rw
@@ -50,6 +54,35 @@ services:
         EOF
         exec nginx -g 'daemon off;'
 
+  box:
+    build:
+      context: .
+      dockerfile: Dockerfile.box
+      args:
+        WITH_VEC: "${WITH_VEC:-0}"
+    volumes:
+      - box_workspace:/workspace
+      - ../:/workspace/rhizome:rw
+      - box_m2_cache:/root/.m2
+      - box_npm_cache:/root/.npm
+      - box_cpcache:/workspace/rhizome/.cpcache
+      - box_shadow_cache:/workspace/rhizome/.shadow-cljs
+      - box_node_modules:/workspace/rhizome/node_modules
+    working_dir: /workspace/rhizome
+    environment:
+      - PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+      - SQLITE_VEC_PATH=/usr/local/lib/sqlite-vec/vec0
+      - OLLAMA_URL=http://ollama-proxy:11434
+      - RHIZOME_BIND_ALL=1
+    depends_on:
+      - ollama-proxy
+    extra_hosts:
+      - "host.docker.internal:0.0.0.0"
+    ports:
+      - "3006:3006"
+    stdin_open: true
+    tty: true
+
 volumes:
   workspace:
   m2_cache:
@@ -58,3 +91,9 @@ volumes:
   cpcache:
   shadow_cache:
   node_modules:
+  box_workspace:
+  box_m2_cache:
+  box_npm_cache:
+  box_cpcache:
+  box_shadow_cache:
+  box_node_modules:
