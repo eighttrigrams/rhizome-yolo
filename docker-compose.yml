@@ -1,5 +1,6 @@
 services:
   claude:
+    hostname: yolo-box
     build:
       context: .
       dockerfile: Dockerfile.yolo
@@ -55,6 +56,7 @@ services:
         exec nginx -g 'daemon off;'
 
   box:
+    hostname: dev-box
     build:
       context: .
       dockerfile: Dockerfile.box
