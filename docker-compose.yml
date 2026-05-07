@@ -82,6 +82,7 @@ services:
       - "host.docker.internal:0.0.0.0"
     ports:
       - "3006:3006"
+      - "9630:9630"
     stdin_open: true
     tty: true
 
