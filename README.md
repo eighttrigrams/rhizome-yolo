@@ -12,7 +12,9 @@ Then on the host: open `http://localhost:3006` (or `:8020`).
 
 ## SQLITE Vec
 
-By default this is on, and as such might expect ollama to run on the host system.
+Off by default. Set `WITH_VEC=1` when building to enable semantic search;
+the image then bundles `sqlite-vec`, Ollama, and the `nomic-embed-text`
+model, so semsearch works inside the container with no host-side install.
 
 Vector-dependent tests are tagged `^:vector`. `make test` auto-detects
 whether the extension file is on disk and adds `--exclude :vector` if

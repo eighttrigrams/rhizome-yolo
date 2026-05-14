@@ -1,0 +1,120 @@
+# Multi-stage build: `base` carries the common rhizome dev toolchain; `box` is
+# a plain dev shell (root) and `yolo` adds the unprivileged `claude` user plus
+# the Playwright/browser stack and the claude-code CLI. Pick a stage via
+# `target:` in docker-compose.yml.
+FROM clojure:temurin-21-tools-deps-bookworm-slim AS base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    curl \
+    git \
+    make \
+    nodejs \
+    npm \
+    sqlite3 \
+    ca-certificates \
+    lsof \
+    procps \
+    socat \
+    zstd \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install \
+ && chmod +x install \
+ && ./install --dir /usr/local/bin --static \
+ && rm install
+
+ARG SQLITE_VEC_VERSION=0.1.9
+ARG WITH_VEC=0
+RUN if [ "$WITH_VEC" = "1" ]; then \
+      mkdir -p /usr/local/lib/sqlite-vec \
+   && case "$(uname -m)" in \
+        x86_64)  slug=linux-x86_64 ;; \
+        aarch64) slug=linux-aarch64 ;; \
+        *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;; \
+      esac \
+   && curl -fsSL "https://github.com/asg017/sqlite-vec/releases/download/v${SQLITE_VEC_VERSION}/sqlite-vec-${SQLITE_VEC_VERSION}-loadable-${slug}.tar.gz" \
+      | tar -xz -C /tmp \
+   && cp /tmp/vec0.so /usr/local/lib/sqlite-vec/vec0.so \
+   && rm -f /tmp/vec0.so \
+   && test -f /usr/local/lib/sqlite-vec/vec0.so; \
+    else \
+      echo "Skipping sqlite-vec install (WITH_VEC=0)"; \
+    fi
+
+ENV SQLITE_VEC_PATH=/usr/local/lib/sqlite-vec/vec0 \
+    RHIZOME_BIND_ALL=1
+
+# Flag the entrypoint reads to decide whether to wait for the Ollama sidecar
+# and pull the embedding model on first run. Set in lockstep with the
+# sqlite-vec install above so semsearch dependencies stay together.
+RUN if [ "$WITH_VEC" = "1" ]; then echo "1" > /etc/rhizome-use-ollama; else echo "0" > /etc/rhizome-use-ollama; fi
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+WORKDIR /workspace/rhizome
+EXPOSE 3006
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+
+# ---------------------------------------------------------------------------
+# box: plain dev shell, runs as root, no browser stack, no claude CLI.
+# ---------------------------------------------------------------------------
+FROM base AS box
+CMD ["bash"]
+
+
+# ---------------------------------------------------------------------------
+# yolo: isolated environment for the claude-code CLI. Adds Playwright/Chromium,
+# postgres + ssh + jq for the agent's tooling, and a non-root `claude` user
+# whose UID/GID are aligned with the host so bind mounts stay writeable.
+# ---------------------------------------------------------------------------
+FROM base AS yolo
+
+ARG USER_UID=501
+ARG USER_GID=20
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    jq \
+    openssh-client \
+    postgresql-client \
+    sudo \
+    chromium \
+    libnss3 \
+    libfreetype6 \
+    libharfbuzz0b \
+    fonts-freefont-ttf \
+    fonts-noto-color-emoji \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium \
+    PATH="/opt/java/openjdk/bin:${PATH}"
+
+# Java profile script so login shells (and the claude-code wrapper) see JAVA_HOME.
+RUN printf 'export JAVA_HOME=/opt/java/openjdk\nexport PATH=$JAVA_HOME/bin:$PATH\n' > /etc/profile.d/java.sh
+
+# Always pass --dangerously-skip-permissions when invoked inside the sandbox.
+RUN npm install -g @anthropic-ai/claude-code \
+ && mv /usr/local/bin/claude /usr/local/bin/claude-bin \
+ && printf '#!/bin/sh\nexec /usr/local/bin/claude-bin --dangerously-skip-permissions "$@"\n' > /usr/local/bin/claude \
+ && chmod +x /usr/local/bin/claude
+
+# Block `git push` and `git commit/merge` on main/master from inside the box.
+RUN printf '#!/bin/sh\ncase "$1" in\n  push)\n    echo "git push is disabled inside the docker container." >&2\n    exit 1\n    ;;\n  commit|merge)\n    branch=$(/usr/bin/git rev-parse --abbrev-ref HEAD 2>/dev/null)\n    if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then\n      echo "refusing to $1 on $branch from inside the container. switch to a feature branch first." >&2\n      exit 1\n    fi\n    ;;\nesac\nexec /usr/bin/git "$@"\n' > /usr/local/bin/git \
+ && chmod +x /usr/local/bin/git
+
+RUN if ! getent group ${USER_GID} >/dev/null; then groupadd -g ${USER_GID} hostgrp; fi \
+ && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash claude \
+ && mkdir -p /home/claude/.claude /home/claude/.m2 /home/claude/.npm \
+ && mkdir -p /workspace \
+ && chown -R ${USER_UID}:${USER_GID} /home/claude /workspace
+
+COPY --chown=${USER_UID}:${USER_GID} claude-config.json /home/claude/.claude.json
+
+RUN printf '[user]\n\tname = Claude\n\temail = claude@eighttrigrams.net\n[init]\n\tdefaultBranch = main\n' > /home/claude/.gitconfig \
+ && chown ${USER_UID}:${USER_GID} /home/claude/.gitconfig
+
+USER claude
+ENV HOME=/home/claude

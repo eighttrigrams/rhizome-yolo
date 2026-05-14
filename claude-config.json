@@ -13,8 +13,7 @@
       "hasCompletedProjectOnboarding": true,
       "projectOnboardingSeenCount": 1,
       "hasClaudeMdExternalIncludesApproved": true,
-      "hasClaudeMdExternalIncludesWarningShown": true,
-      "enabledMcpjsonServers": ["playwright"]
+      "hasClaudeMdExternalIncludesWarningShown": true
     }
   }
 }
