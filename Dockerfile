@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     curl \
     git \
+    jq \
     make \
     nodejs \
     npm \
@@ -76,7 +77,6 @@ ARG USER_UID=501
 ARG USER_GID=20
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    jq \
     openssh-client \
     postgresql-client \
     sudo \
