@@ -109,7 +109,9 @@ RUN if ! getent group ${USER_GID} >/dev/null; then groupadd -g ${USER_GID} hostg
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash claude \
  && mkdir -p /home/claude/.claude /home/claude/.m2 /home/claude/.npm \
  && mkdir -p /workspace \
- && chown -R ${USER_UID}:${USER_GID} /home/claude /workspace
+ && chown -R ${USER_UID}:${USER_GID} /home/claude /workspace \
+ && echo "claude ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/claude \
+ && chmod 0440 /etc/sudoers.d/claude
 
 COPY --chown=${USER_UID}:${USER_GID} claude-config.json /home/claude/.claude.json
 

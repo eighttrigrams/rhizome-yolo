@@ -1,3 +1,7 @@
+# Compose project name overrides the directory-derived default ("docker"), so
+# volumes/containers get prefixed `rhizome_*` instead of the meaningless `docker_*`.
+name: rhizome
+
 # Shared bits factored as YAML anchors. Both app services point at the same
 # Dockerfile and differ only in the `target:` stage (yolo vs box) plus the
 # user/MCP-specific bits the agent container needs. Ollama runs as a sidecar
@@ -14,12 +18,14 @@ x-common-env: &common-env
   # same :ollama-url "http://127.0.0.1:11434" work on host and in container.
   SQLITE_VEC_PATH: /usr/local/lib/sqlite-vec/vec0
   RHIZOME_BIND_ALL: 1
-  # Surfaced to onboard.sh so `make box PORT=3007` followed by `make onboard`
-  # inside the container writes config.edn (and docker/.env) with these
-  # values. Defaults match the compose port-mapping defaults below.
+  # Surfaced to onboard.sh so `make box PORT=3007 WITH_VEC=1` followed by
+  # `make onboard` inside the container writes config.edn (and docker/.env)
+  # with these values. WITH_VEC=1 also makes onboard add the :semsearch key.
+  # Defaults match the compose port-mapping defaults below.
   PORT: "${PORT:-3006}"
   SHADOW_PORT: "${SHADOW_PORT:-8020}"
   SHADOW_NREPL_PORT: "${SHADOW_NREPL_PORT:-9630}"
+  WITH_VEC: "${WITH_VEC:-0}"
 
 x-common-ports: &common-ports
   - "${PORT:-3006}:${PORT:-3006}"
