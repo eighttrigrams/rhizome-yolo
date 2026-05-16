@@ -13,24 +13,19 @@ x-build-args: &build-args
 
 x-common-env: &common-env
   # config.edn (bind-mounted from the repo) is the single source of truth for
-  # :port and :ollama-url. Inside the container, entrypoint.sh runs a socat
-  # bridge so 127.0.0.1:11434 reaches the `ollama` sidecar, which lets the
-  # same :ollama-url "http://127.0.0.1:11434" work on host and in container.
-  SQLITE_VEC_PATH: /usr/local/lib/sqlite-vec/vec0
-  RHIZOME_BIND_ALL: 1
-  # Surfaced to onboard.sh so `make box PORT=3007 WITH_VEC=1` followed by
-  # `make onboard` inside the container writes config.edn (and docker/.env)
-  # with these values. WITH_VEC=1 also makes onboard add the :semsearch key.
-  # Defaults match the compose port-mapping defaults below.
-  PORT: "${PORT:-3006}"
-  SHADOW_PORT: "${SHADOW_PORT:-8020}"
-  SHADOW_NREPL_PORT: "${SHADOW_NREPL_PORT:-9630}"
+  # :ollama-url. Inside the container, entrypoint.sh runs a socat bridge so
+  # 127.0.0.1:11434 reaches the `ollama` sidecar, which lets the same
+  # :ollama-url "http://127.0.0.1:11434" work on host and in container.
+  # PORT / SHADOW_PORT come from the Makefile (which itself reads .envrc /
+  # config.edn / shadow-cljs.edn -- see scripts/detect-ports.sh) and are
+  # forwarded straight through; aero / shadow-cljs read them via #env.
+  # sqlite-vec location lives in config.edn under :semsearch :vec-path
+  # (set by onboard.sh when WITH_VEC=1), so no env override is needed here.
+  # The server binds 0.0.0.0 automatically when :dev? true (see server.clj),
+  # so no RHIZOME_BIND_ALL is needed in the container either.
+  PORT: "${PORT}"
+  SHADOW_PORT: "${SHADOW_PORT}"
   WITH_VEC: "${WITH_VEC:-0}"
-
-x-common-ports: &common-ports
-  - "${PORT:-3006}:${PORT:-3006}"
-  - "${SHADOW_PORT:-8020}:${SHADOW_PORT:-8020}"
-  - "${SHADOW_NREPL_PORT:-9630}:${SHADOW_NREPL_PORT:-9630}"
 
 services:
   # Official Ollama image runs serve on entry. The first time the app starts
@@ -70,7 +65,6 @@ services:
       # yolo-only: lets the agent invoke `claude` and Playwright/Chromium.
       CLAUDE_CODE_OAUTH_TOKEN:
       PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: /usr/bin/chromium
-    ports: *common-ports
     # `required: false` lets the dependency be silently skipped when the
     # `vec` profile isn't active (ollama service then isn't part of the
     # project). Compose v2.20+.
@@ -99,7 +93,6 @@ services:
     working_dir: /workspace/rhizome
     environment:
       <<: *common-env
-    ports: *common-ports
     # `required: false` lets the dependency be silently skipped when the
     # `vec` profile isn't active (ollama service then isn't part of the
     # project). Compose v2.20+.

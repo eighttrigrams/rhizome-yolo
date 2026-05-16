@@ -43,9 +43,6 @@ RUN if [ "$WITH_VEC" = "1" ]; then \
       echo "Skipping sqlite-vec install (WITH_VEC=0)"; \
     fi
 
-ENV SQLITE_VEC_PATH=/usr/local/lib/sqlite-vec/vec0 \
-    RHIZOME_BIND_ALL=1
-
 # Flag the entrypoint reads to decide whether to wait for the Ollama sidecar
 # and pull the embedding model on first run. Set in lockstep with the
 # sqlite-vec install above so semsearch dependencies stay together.
@@ -61,6 +58,8 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # ---------------------------------------------------------------------------
 # box: plain dev shell, runs as root, no browser stack, no claude CLI.
+# `make e2e` from inside `box` will fail by design with a directed message
+# (see scripts/e2e.sh) -- e2e lives in the yolo image (or on the host).
 # ---------------------------------------------------------------------------
 FROM base AS box
 CMD ["bash"]
