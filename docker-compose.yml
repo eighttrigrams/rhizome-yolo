@@ -1,6 +1,8 @@
-# Compose project name overrides the directory-derived default ("docker"), so
-# volumes/containers get prefixed `rhizome_*` instead of the meaningless `docker_*`.
-name: rhizome
+# Compose project name is derived from the repo's parent-folder name by
+# the Makefile (COMPOSE_PROJECT_NAME), so a second checkout in a sibling
+# directory gets its own volumes/containers prefix and the two don't
+# collide on shared state. See the "Running multiple checkouts" section
+# in README.md.
 
 # Shared bits factored as YAML anchors. Both app services point at the same
 # Dockerfile and differ only in the `target:` stage (yolo vs box) plus the
