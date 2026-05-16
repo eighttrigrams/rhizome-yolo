@@ -15,14 +15,17 @@ x-build-args: &build-args
 
 x-common-env: &common-env
   # config.edn (bind-mounted from the repo) is the single source of truth for
-  # :ollama-url. Inside the container, entrypoint.sh runs a socat bridge so
-  # 127.0.0.1:11434 reaches the `ollama` sidecar, which lets the same
-  # :ollama-url "http://127.0.0.1:11434" work on host and in container.
+  # :ollama-url. It resolves via aero #or [#env VEC_URL "http://127.0.0.1:11434"];
+  # the Dockerfile sets VEC_URL=http://127.0.0.1:11437 and entrypoint.sh runs
+  # a socat bridge on :11437 -> sidecar :11434, so the same config.edn works
+  # on host (falls back to :11434) and in the container.
   # PORT / SHADOW_PORT come from the Makefile (which itself reads .envrc /
   # config.edn / shadow-cljs.edn -- see scripts/detect-ports.sh) and are
   # forwarded straight through; aero / shadow-cljs read them via #env.
-  # sqlite-vec location lives in config.edn under :semsearch :vec-path
-  # (set by onboard.sh when WITH_VEC=1), so no env override is needed here.
+  # sqlite-vec location: config.edn writes
+  # :vec-path #or [#env VEC_PATH "./.sqlite-vec/vec0"], and the Dockerfile
+  # sets VEC_PATH=/usr/local/lib/sqlite-vec/vec0 so the in-container path
+  # wins automatically. Nothing to wire here.
   # The server binds 0.0.0.0 automatically when :dev? true (see server.clj),
   # so no RHIZOME_BIND_ALL is needed in the container either.
   PORT: "${PORT}"

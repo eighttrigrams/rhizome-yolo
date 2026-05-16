@@ -48,6 +48,18 @@ RUN if [ "$WITH_VEC" = "1" ]; then \
 # sqlite-vec install above so semsearch dependencies stay together.
 RUN if [ "$WITH_VEC" = "1" ]; then echo "1" > /etc/rhizome-use-ollama; else echo "0" > /etc/rhizome-use-ollama; fi
 
+# config.edn's :semsearch entries use aero #or [#env ...] so the same file
+# works on host and in the container. Inside the container:
+#   * the sqlite-vec .so lives at /usr/local/lib/sqlite-vec/vec0 (see the
+#     WITH_VEC RUN block above)
+#   * the ollama sidecar is reached via a socat bridge on 127.0.0.1:11437
+#     (entrypoint.sh), kept off :11434 so a host-side ollama exposed into
+#     this container's network namespace can't shadow the sidecar
+# Set unconditionally -- harmless when :semsearch isn't in config.edn, and
+# means we don't carry a second copy of the WITH_VEC conditional here.
+ENV VEC_PATH=/usr/local/lib/sqlite-vec/vec0
+ENV VEC_URL=http://127.0.0.1:11437
+
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
