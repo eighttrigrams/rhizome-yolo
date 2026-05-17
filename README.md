@@ -8,7 +8,7 @@ JDK 21 + `clj`, Node + npm, system Chromium for Playwright, `claude` CLI
 (wrapped to always pass `--dangerously-skip-permissions`), `gh`, `make`,
 `postgresql-client`, `lsof`.
 
-Then on the host: open `http://localhost:3006` (or `:8020`).
+Then on the host: open `http://localhost:3140` (or `:8020`).
 
 ## SQLITE Vec
 
