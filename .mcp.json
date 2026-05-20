@@ -9,8 +9,7 @@
         "--no-sandbox",
         "--executable-path=/usr/bin/chromium",
         "--viewport-size=1400x900",
-        "--output-dir=.playwright-mcp",
-        "--allowed-origins=http://localhost:3006"
+        "--output-dir=.playwright-mcp"
       ]
     }
   }
