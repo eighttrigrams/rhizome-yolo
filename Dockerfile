@@ -64,6 +64,12 @@ ENV VEC_URL=http://127.0.0.1:11437
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# Block `git push` from inside the container (inherited by both box and yolo).
+# Committing/merging (including on main) is allowed -- in-box commits are
+# traceable via the baked-in Claude git identity.
+RUN printf '#!/bin/sh\ncase "$1" in\n  push)\n    echo "git push is disabled inside the docker container." >&2\n    exit 1\n    ;;\nesac\nexec /usr/bin/git "$@"\n' > /usr/local/bin/git \
+ && chmod +x /usr/local/bin/git
+
 WORKDIR /workspace/rhizome
 EXPOSE 3006
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
@@ -75,6 +81,10 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 # (see scripts/e2e.sh) -- e2e lives in the yolo image (or on the host).
 # ---------------------------------------------------------------------------
 FROM base AS box
+# Bake in the Claude git identity so in-box commits (as root) are attributed
+# to Claude <claude@eighttrigrams.net>, matching ../docker. pull.rebase=false
+# enforces the merge-not-rebase policy.
+RUN printf '[user]\n\tname = Claude\n\temail = claude@eighttrigrams.net\n[pull]\n\trebase = false\n[init]\n\tdefaultBranch = main\n' > /root/.gitconfig
 CMD ["bash"]
 
 
@@ -113,10 +123,6 @@ RUN npm install -g @anthropic-ai/claude-code \
  && printf '#!/bin/sh\nexec /usr/local/bin/claude-bin --dangerously-skip-permissions "$@"\n' > /usr/local/bin/claude \
  && chmod +x /usr/local/bin/claude
 
-# Block `git push` and `git commit/merge` on main/master from inside the box.
-RUN printf '#!/bin/sh\ncase "$1" in\n  push)\n    echo "git push is disabled inside the docker container." >&2\n    exit 1\n    ;;\n  commit|merge)\n    branch=$(/usr/bin/git rev-parse --abbrev-ref HEAD 2>/dev/null)\n    if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then\n      echo "refusing to $1 on $branch from inside the container. switch to a feature branch first." >&2\n      exit 1\n    fi\n    ;;\nesac\nexec /usr/bin/git "$@"\n' > /usr/local/bin/git \
- && chmod +x /usr/local/bin/git
-
 RUN if ! getent group ${USER_GID} >/dev/null; then groupadd -g ${USER_GID} hostgrp; fi \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash claude \
  && mkdir -p /home/claude/.claude /home/claude/.m2 /home/claude/.npm \
@@ -127,7 +133,7 @@ RUN if ! getent group ${USER_GID} >/dev/null; then groupadd -g ${USER_GID} hostg
 
 COPY --chown=${USER_UID}:${USER_GID} claude-config.json /home/claude/.claude.json
 
-RUN printf '[user]\n\tname = Claude\n\temail = claude@eighttrigrams.net\n[init]\n\tdefaultBranch = main\n' > /home/claude/.gitconfig \
+RUN printf '[user]\n\tname = Claude\n\temail = claude@eighttrigrams.net\n[pull]\n\trebase = false\n[init]\n\tdefaultBranch = main\n' > /home/claude/.gitconfig \
  && chown ${USER_UID}:${USER_GID} /home/claude/.gitconfig
 
 USER claude
