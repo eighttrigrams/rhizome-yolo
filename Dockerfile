@@ -71,7 +71,9 @@ RUN printf '#!/bin/sh\ncase "$1" in\n  push)\n    echo "git push is disabled ins
  && chmod +x /usr/local/bin/git
 
 WORKDIR /workspace/rhizome
-EXPOSE 3006
+# Rhizome dev ports per ../README.md: PORT=3140 (JVM), SHADOW_PORT=9804 (shadow-cljs).
+# EXPOSE is documentation only; actual publishing is via compose --service-ports.
+EXPOSE 3140 9804
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 
