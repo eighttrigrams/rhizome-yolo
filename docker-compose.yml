@@ -34,7 +34,7 @@ x-common-env: &common-env
 
 services:
   # Official Ollama image runs serve on entry. The first time the app starts
-  # it asks this sidecar to pull nomic-embed-text into ollama_models (see
+  # it asks this sidecar to pull qwen3-embedding:0.6b into ollama_models (see
   # entrypoint.sh); subsequent runs find the model already cached. Gated by
   # the `vec` compose profile -- only activated when WITH_VEC=1 (see Makefile)
   # so users who don't need semsearch never pull this 3 GB image.

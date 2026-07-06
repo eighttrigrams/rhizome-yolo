@@ -13,7 +13,7 @@ Then on the host: open `http://localhost:3140` (or `:8020`).
 ## SQLITE Vec
 
 Off by default. Set `WITH_VEC=1` when building to enable semantic search;
-the image then bundles `sqlite-vec`, Ollama, and the `nomic-embed-text`
+the image then bundles `sqlite-vec`, Ollama, and the `qwen3-embedding:0.6b`
 model, so semsearch works inside the container with no host-side install.
 
 Vector-dependent tests are tagged `^:vector`. `make test` looks at
