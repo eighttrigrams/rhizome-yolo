@@ -7,7 +7,7 @@
         "--headless",
         "--isolated",
         "--no-sandbox",
-        "--executable-path=/usr/bin/chromium",
+        "--executable-path=/usr/local/bin/pw-chromium",
         "--viewport-size=1400x900",
         "--output-dir=.playwright-mcp"
       ]
