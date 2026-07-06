@@ -67,9 +67,11 @@ services:
     working_dir: /workspace/rhizome
     environment:
       <<: *common-env
-      # yolo-only: lets the agent invoke `claude` and Playwright/Chromium.
+      # yolo-only: lets the agent invoke `claude`.
+      # PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH comes from the image ENV
+      # (Dockerfile yolo stage) -- do not override it here, or the box falls
+      # back to Debian's chromium, which SIGTRAPs under the linuxkit kernel.
       CLAUDE_CODE_OAUTH_TOKEN:
-      PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: /usr/bin/chromium
     # `required: false` lets the dependency be silently skipped when the
     # `vec` profile isn't active (ollama service then isn't part of the
     # project). Compose v2.20+.

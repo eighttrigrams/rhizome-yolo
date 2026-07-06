@@ -112,8 +112,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-color-emoji \
  && rm -rf /var/lib/apt/lists/*
 
+# Debian's chromium (>=150) dies with SIGTRAP (a compiled-in CHECK) under
+# Docker Desktop's linuxkit kernel, so all in-box browser work (Playwright
+# MCP, make e2e) uses Playwright's own chromium build instead. It is baked
+# into the image at a fixed path below and reached via the stable
+# /usr/local/bin/pw-chromium symlink; the Debian chromium package stays
+# installed purely to pull in the browser runtime dependencies.
+ARG PLAYWRIGHT_VERSION=1.58.2
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN mkdir -p /opt/ms-playwright /tmp/pwsetup && cd /tmp/pwsetup \
+ && npm init -y >/dev/null \
+ && npm install playwright-core@${PLAYWRIGHT_VERSION} >/dev/null \
+ && npx playwright-core install chromium-headless-shell \
+ && rm -rf /tmp/pwsetup \
+ && ln -s "$(find /opt/ms-playwright -type f -name headless_shell | head -1)" /usr/local/bin/pw-chromium \
+ && chmod -R a+rX /opt/ms-playwright \
+ && /usr/local/bin/pw-chromium --version
+
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/local/bin/pw-chromium \
     PATH="/opt/java/openjdk/bin:${PATH}"
 
 # Java profile script so login shells (and the claude-code wrapper) see JAVA_HOME.
