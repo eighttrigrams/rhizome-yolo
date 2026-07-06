@@ -118,7 +118,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # into the image at a fixed path below and reached via the stable
 # /usr/local/bin/pw-chromium symlink; the Debian chromium package stays
 # installed purely to pull in the browser runtime dependencies.
-ARG PLAYWRIGHT_VERSION=1.58.2
+# Keep in lockstep with @playwright/test in package.json.
+ARG PLAYWRIGHT_VERSION=1.61.1
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN mkdir -p /opt/ms-playwright /tmp/pwsetup && cd /tmp/pwsetup \
  && npm init -y >/dev/null \
@@ -127,6 +128,7 @@ RUN mkdir -p /opt/ms-playwright /tmp/pwsetup && cd /tmp/pwsetup \
  && rm -rf /tmp/pwsetup \
  && ln -s "$(find /opt/ms-playwright -type f -name headless_shell | head -1)" /usr/local/bin/pw-chromium \
  && chmod -R a+rX /opt/ms-playwright \
+ && echo "${PLAYWRIGHT_VERSION}" > /opt/ms-playwright/PLAYWRIGHT_VERSION \
  && /usr/local/bin/pw-chromium --version
 
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
@@ -137,7 +139,9 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
 RUN printf 'export JAVA_HOME=/opt/java/openjdk\nexport PATH=$JAVA_HOME/bin:$PATH\n' > /etc/profile.d/java.sh
 
 # Always pass --dangerously-skip-permissions when invoked inside the sandbox.
-RUN npm install -g @anthropic-ai/claude-code \
+# Pinned; bump deliberately rather than riding npm latest.
+ARG CLAUDE_CODE_VERSION=2.1.201
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
  && mv /usr/local/bin/claude /usr/local/bin/claude-bin \
  && printf '#!/bin/sh\nexec /usr/local/bin/claude-bin --dangerously-skip-permissions "$@"\n' > /usr/local/bin/claude \
  && chmod +x /usr/local/bin/claude
