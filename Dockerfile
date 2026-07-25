@@ -140,7 +140,7 @@ RUN printf 'export JAVA_HOME=/opt/java/openjdk\nexport PATH=$JAVA_HOME/bin:$PATH
 
 # Always pass --dangerously-skip-permissions when invoked inside the sandbox.
 # Pinned; bump deliberately rather than riding npm latest.
-ARG CLAUDE_CODE_VERSION=2.1.201
+ARG CLAUDE_CODE_VERSION=2.1.220
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
  && mv /usr/local/bin/claude /usr/local/bin/claude-bin \
  && printf '#!/bin/sh\nexec /usr/local/bin/claude-bin --dangerously-skip-permissions "$@"\n' > /usr/local/bin/claude \
