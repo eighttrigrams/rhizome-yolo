@@ -5,8 +5,7 @@
   "enabledPlugins": {
     "clj-nrepl-eval@eighttrigrams": true,
     "tools@eighttrigrams": false,
-    "editor-layouts@eighttrigrams": true,
-    "rhizome@eighttrigrams": true
+    "editor-layouts@eighttrigrams": true
   },
   "extraKnownMarketplaces": {
     "eighttrigrams": {
