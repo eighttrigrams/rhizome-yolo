@@ -62,10 +62,6 @@ services:
       # they are overlaid back in below the dir mount.
       - ./.claude:/workspace/rhizome/.claude:rw
       - ../.claude/skills:/workspace/rhizome/.claude/skills:rw
-      # rhizome-user lives in resources/ (on the classpath) because the app
-      # itself serves it as the :skill key of GET /api/describe. That copy is
-      # canonical; the box gets it mounted in as a skill like any other.
-      - ../resources/rhizome-user:/workspace/rhizome/.claude/skills/rhizome-user:rw
       - ./package-lock.json:/workspace/rhizome/package-lock.json:rw
       - m2_cache:/home/claude/.m2
       - npm_cache:/home/claude/.npm
