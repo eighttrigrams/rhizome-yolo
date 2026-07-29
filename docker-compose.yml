@@ -56,7 +56,13 @@ services:
       - workspace:/workspace
       - ../:/workspace/rhizome:rw
       - ./.mcp.json:/workspace/rhizome/.mcp.json:rw
-      - ./.claude/settings.json:/workspace/rhizome/.claude/settings.json:rw
+      # The box gets its own .claude dir, not the repo's (whose
+      # settings.local.json is a symlink into the host dotfiles — dangling in
+      # here). The repo's skills are the one part meant to shine through, so
+      # they are overlaid back in below the dir mount.
+      - ./.claude:/workspace/rhizome/.claude:rw
+      - ../.claude/skills:/workspace/rhizome/.claude/skills:rw
+      - ../claude-skill/rhizome-user:/workspace/rhizome/.claude/skills/rhizome-user:rw
       - ./package-lock.json:/workspace/rhizome/package-lock.json:rw
       - m2_cache:/home/claude/.m2
       - npm_cache:/home/claude/.npm
