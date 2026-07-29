@@ -42,5 +42,7 @@ for sibling in rhizome-books claude-stuff; do
 done
 
 export WITH_VEC="${WITH_VEC:-0}"
-docker compose build claude
+# A failed build must not fall through to `run`, which would silently start
+# the previous image and make the failure look like success.
+docker compose build claude || exit $?
 docker compose run --rm --service-ports "${EXTRA_VOLUMES[@]}" claude

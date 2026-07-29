@@ -11,14 +11,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     imagemagick \
     jq \
     make \
-    nodejs \
-    npm \
     sqlite3 \
     ca-certificates \
     lsof \
     procps \
     socat \
     zstd \
+ && rm -rf /var/lib/apt/lists/*
+
+# Node 22 from NodeSource (bundles npm): bookworm ships Node 18, which
+# playwright — and with it @playwright/mcp — refuses to run on (>=20), and
+# claude-code needs >=22 (on less, npm warns EBADENGINE and silently skips
+# linking the `claude` binary, failing the yolo stage).
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/*
 
 RUN curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install \
@@ -141,7 +147,9 @@ RUN printf 'export JAVA_HOME=/opt/java/openjdk\nexport PATH=$JAVA_HOME/bin:$PATH
 # Always pass --dangerously-skip-permissions when invoked inside the sandbox.
 # Pinned; bump deliberately rather than riding npm latest.
 ARG CLAUDE_CODE_VERSION=2.1.220
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+# --prefix /usr/local: NodeSource's npm globals default to /usr (Debian's
+# patched npm used /usr/local), and the wrapper below expects /usr/local/bin.
+RUN npm install -g --prefix /usr/local @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
  && mv /usr/local/bin/claude /usr/local/bin/claude-bin \
  && printf '#!/bin/sh\nexec /usr/local/bin/claude-bin --dangerously-skip-permissions "$@"\n' > /usr/local/bin/claude \
  && chmod +x /usr/local/bin/claude
