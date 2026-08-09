@@ -63,6 +63,18 @@ services:
       - ./.claude:/workspace/rhizome/.claude:rw
       - ../.claude/skills:/workspace/rhizome/.claude/skills:rw
       - ./package-lock.json:/workspace/rhizome/package-lock.json:rw
+      # The us-vs-them *checkout*, not the CLI (that one is a single script on
+      # PATH, mounted by the per-machine override). deps.edn names the library
+      # {:local/root "../us-vs-them"} the way the suite names every cross-app
+      # dependency, and tools.deps resolves that relative to the file declaring
+      # it -- so from /workspace/rhizome/deps.edn it has to land at
+      # /workspace/us-vs-them, and without this mount every clj invocation in
+      # here dies at once with
+      #     Local lib eighttrigrams/us-vs-them not found: /workspace/us-vs-them
+      # Read-only: the box compiles against its src, it does not develop it.
+      # A clone of rhizome without the sibling checkout beside it will find an
+      # empty dir here and fail that way -- see README, "Getting started".
+      - ../../us-vs-them:/workspace/us-vs-them:ro
       - m2_cache:/home/claude/.m2
       - npm_cache:/home/claude/.npm
       - claude_home:/home/claude/.claude
@@ -97,6 +109,8 @@ services:
     volumes:
       - box_workspace:/workspace
       - ../:/workspace/rhizome:rw
+      # Same :local/root resolution as the yolo service above, same reason.
+      - ../../us-vs-them:/workspace/us-vs-them:ro
       - box_m2_cache:/root/.m2
       - box_npm_cache:/root/.npm
       - box_cpcache:/workspace/rhizome/.cpcache
