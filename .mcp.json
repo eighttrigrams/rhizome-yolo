@@ -1,9 +1,8 @@
 {
   "mcpServers": {
     "playwright": {
-      "command": "npx",
+      "command": "playwright-mcp",
       "args": [
-        "@playwright/mcp@latest",
         "--headless",
         "--isolated",
         "--no-sandbox",

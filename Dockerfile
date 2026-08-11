@@ -154,6 +154,16 @@ RUN npm install -g --prefix /usr/local @anthropic-ai/claude-code@${CLAUDE_CODE_V
  && printf '#!/bin/sh\nexec /usr/local/bin/claude-bin --dangerously-skip-permissions "$@"\n' > /usr/local/bin/claude \
  && chmod +x /usr/local/bin/claude
 
+# @playwright/mcp as a pinned global, which is what lets docker/.mcp.json say
+# `playwright-mcp` instead of `npx @playwright/mcp@latest`. npx re-resolves
+# `@latest` against the npm registry on *every* startup, and locked mode
+# (docker-compose.locked.yml) blocks the registry -- so the old form would take
+# the browser MCP server down with it. Same pin as ../../docker/Dockerfile so
+# both boxes run the same server. --prefix /usr/local for the same reason as
+# claude-code above.
+ARG PLAYWRIGHT_MCP_VERSION=0.0.75
+RUN npm install -g --prefix /usr/local @playwright/mcp@${PLAYWRIGHT_MCP_VERSION}
+
 RUN if ! getent group ${USER_GID} >/dev/null; then groupadd -g ${USER_GID} hostgrp; fi \
  && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash claude \
  && mkdir -p /home/claude/.claude /home/claude/.m2 /home/claude/.npm \
@@ -169,3 +179,60 @@ RUN printf '[user]\n\tname = Claude\n\temail = claude@eighttrigrams.net\n[pull]\
 
 USER claude
 ENV HOME=/home/claude
+
+# Pre-warm the dependency caches so a locked-mode box (docker-compose.locked.yml)
+# never reaches Clojars, Maven Central or the npm registry at runtime. None of
+# them are in tinyproxy.filter -- they are broad exfil channels, which is the
+# whole reason the box is locked -- so in locked mode a cold cache is a hard
+# failure, not a slow first run.
+#
+# Each cache lands at a path where a runtime named volume mounts. Docker
+# initializes an empty named volume from the image content at that path on first
+# mount, so a scrubbed volume inherits everything baked here:
+#   /home/claude/.m2                 -> m2_cache
+#   /home/claude/.npm                -> npm_cache
+#   /workspace/rhizome/node_modules  -> node_modules
+#   /workspace/rhizome/.shadow-cljs  -> shadow_cache
+# The bind mount over /workspace/rhizome hides the staged files themselves at
+# runtime, which is fine: only the caches they produce need to survive.
+#
+# Inputs come from docker/.build-stage, filled by run.sh before the build. The
+# build context is docker/, so ../deps.edn and the us-vs-them sibling checkout
+# are otherwise unreachable from in here.
+COPY --chown=${USER_UID}:${USER_GID} .build-stage/deps.edn            /workspace/rhizome/deps.edn
+COPY --chown=${USER_UID}:${USER_GID} .build-stage/shadow-cljs.edn     /workspace/rhizome/shadow-cljs.edn
+COPY --chown=${USER_UID}:${USER_GID} .build-stage/package.json        /workspace/rhizome/package.json
+COPY --chown=${USER_UID}:${USER_GID} .build-stage/package-lock.json   /workspace/rhizome/package-lock.json
+# deps.edn declares eighttrigrams/us-vs-them {:local/root "../us-vs-them"}, and
+# tools.deps follows that during resolution, so this file has to be on disk
+# before the one pointing at it. Only the deps.edn: `clj -P` resolves
+# dependencies and never reads a :paths entry, and the source arrives at runtime
+# on the read-only bind mount in docker-compose.yml.
+COPY --chown=${USER_UID}:${USER_GID} .build-stage/us-vs-them-deps.edn /workspace/us-vs-them/deps.edn
+
+# Four resolvers, because rhizome's runtime deps come from two places that do
+# not know about each other:
+#   `clj -P -M:dev:test:e2e`  the aliases scripts/{start,run-tests}.sh and
+#                             test/playwright.config.ts actually invoke
+#   `clj -P -T:build`         :build's own :deps (tools.build)
+#   `npm ci`                  deterministic install from package-lock.json;
+#                             does not consult the registry for a resolution
+#                             the way `npm install` does
+#   `shadow-cljs classpath`   shadow-cljs.edn carries its OWN :dependencies
+#                             (reagent, cljs-ajax, ...) which it resolves into
+#                             ~/.m2 itself -- `clj -P` above never sees them,
+#                             and missing this is what would break `make start`
+#                             and `make e2e` in locked mode.
+# src/cljs and resources exist only so shadow-cljs's :source-paths resolve
+# during the classpath computation; the real ones arrive on the bind mount.
+#
+# The .npm-installed sentinel is what stops entrypoint.sh running `npm install`
+# on first entry -- in locked mode that call cannot reach the registry, and
+# without the marker every fresh box would emit its failure warning.
+RUN cd /workspace/rhizome \
+ && mkdir -p src/cljs resources \
+ && clj -P -M:dev:test:e2e \
+ && clj -P -T:build \
+ && npm ci --silent --no-audit --no-fund \
+ && npx shadow-cljs classpath \
+ && touch node_modules/.npm-installed
