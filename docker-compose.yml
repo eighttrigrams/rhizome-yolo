@@ -55,6 +55,44 @@ services:
     volumes:
       - workspace:/workspace
       - ../:/workspace/rhizome:rw
+      # ...but not its own cage. The line above is the whole checkout read-write,
+      # and this directory is inside it, so without this an in-box agent can
+      # rewrite the terms it runs under: append a host to tinyproxy.filter, drop
+      # `networks: [locked]` from docker-compose.locked.yml, edit this file. None
+      # of it takes effect immediately -- the running container is already
+      # configured -- but the next `make yolo` reads the edited files, so the
+      # lockdown would last exactly until the box asked for it to stop.
+      #
+      # Read-only here rather than absent: the box has good reason to *read*
+      # these (an agent asked about its own sandbox should be able to look), and
+      # `make yolo` itself needs nothing in here writable -- run.sh does its
+      # seeding and staging host-side, before the container exists.
+      #
+      # Note this stops modification, not reading: docker/token still holds the
+      # OAuth token, which the box also has in its environment anyway.
+      - ../docker:/workspace/rhizome/docker:ro
+      # The same reasoning, one step out, for the part that is worse. Everything
+      # `make yolo` runs before the container exists runs on the HOST: the
+      # Makefile itself, then detect-ports.sh and write-compose-ports.sh. Left
+      # writable, a box cannot unlock its own cage any more but it can leave
+      # instructions that the owner's own hand carries out at the next
+      # `make yolo` -- host code execution, not merely a wider whitelist. Every
+      # other `make` target shells into here too (onboard, start, stop,
+      # run-tests, e2e, install-sqlite-vec), so the whole directory goes.
+      #
+      # Nothing writes into scripts/ at runtime, so this costs the box nothing at
+      # run time. What it does cost: an in-box agent can no longer edit these as
+      # part of ordinary work, and a `git pull`/merge touching them fails on the
+      # read-only mount. Both are host-side jobs here anyway.
+      #
+      # NOT sealed by this, and worth knowing: deps.edn, package.json and
+      # build.clj stay writable because adding a dependency is ordinary in-box
+      # work -- and each is a host-execution path of its own (a new coordinate, an
+      # npm lifecycle script). Same for .claude/skills, which the host's own
+      # agent reads. This is depth, not a boundary; reviewing what the box commits
+      # is still what actually holds.
+      - ../Makefile:/workspace/rhizome/Makefile:ro
+      - ../scripts:/workspace/rhizome/scripts:ro
       - ./.mcp.json:/workspace/rhizome/.mcp.json:rw
       # The box gets its own .claude dir, not the repo's (whose
       # settings.local.json is a symlink into the host dotfiles — dangling in
