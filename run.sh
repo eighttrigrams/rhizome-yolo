@@ -78,6 +78,12 @@ cp ../package.json      "$STAGE_DIR/package.json"
 # above: `npm ci` aborts unless the lockfile agrees with package.json, and that
 # pair is the one guaranteed to.
 cp ../package-lock.json "$STAGE_DIR/package-lock.json"
+# The editor library, packed. package.json depends on it as file:vendor/*.tgz --
+# a path npm resolves on disk, not from the registry -- so `npm ci` in the image
+# fails on a missing file without it, in locked and open mode alike. Re-packed by
+# ../../vendor-editor.sh, whose --check also asserts this copy exists.
+rm -rf "$STAGE_DIR/vendor"
+cp -R ../vendor         "$STAGE_DIR/vendor"
 # Only the deps.edn -- see the COPY comment in Dockerfile for why the source
 # isn't needed at build time.
 if [ ! -f ../../us-vs-them/deps.edn ]; then

@@ -203,6 +203,11 @@ COPY --chown=${USER_UID}:${USER_GID} .build-stage/deps.edn            /workspace
 COPY --chown=${USER_UID}:${USER_GID} .build-stage/shadow-cljs.edn     /workspace/rhizome/shadow-cljs.edn
 COPY --chown=${USER_UID}:${USER_GID} .build-stage/package.json        /workspace/rhizome/package.json
 COPY --chown=${USER_UID}:${USER_GID} .build-stage/package-lock.json   /workspace/rhizome/package-lock.json
+# package.json takes the editor library as file:vendor/<packed>.tgz, which npm
+# resolves against the filesystem rather than the registry -- so `npm ci` below
+# dies on a missing file if this is not here. The bind mount brings the real
+# vendor/ at runtime; this copy is only for the build.
+COPY --chown=${USER_UID}:${USER_GID} .build-stage/vendor               /workspace/rhizome/vendor
 # deps.edn declares eighttrigrams/us-vs-them {:local/root "../us-vs-them"}, and
 # tools.deps follows that during resolution, so this file has to be on disk
 # before the one pointing at it. Only the deps.edn: `clj -P` resolves
