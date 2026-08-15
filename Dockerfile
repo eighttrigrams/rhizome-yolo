@@ -67,7 +67,7 @@ RUN printf 'export JAVA_HOME=/opt/java/openjdk\nexport PATH=$JAVA_HOME/bin:$PATH
 
 # Always pass --dangerously-skip-permissions when invoked inside the sandbox.
 # Pinned; bump deliberately rather than riding npm latest.
-ARG CLAUDE_CODE_VERSION=2.1.220
+ARG CLAUDE_CODE_VERSION=2.1.231
 # --prefix /usr/local: NodeSource's npm globals default to /usr (Debian's
 # patched npm used /usr/local), and the wrapper below expects /usr/local/bin.
 RUN npm install -g --prefix /usr/local @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
