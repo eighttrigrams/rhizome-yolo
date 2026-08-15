@@ -1,31 +1,39 @@
-# Compose project name is derived from the repo's parent-folder name by
-# the Makefile (COMPOSE_PROJECT_NAME), so a second checkout in a sibling
-# directory gets its own volumes/containers prefix and the two don't
-# collide on shared state. See the "Running multiple checkouts" section
-# in README.md.
+# The yolo box, standalone. This project is deliberately NOT layered onto
+# ../rhizome/docker/docker-compose.yml via COMPOSE_FILE: compose resolves every
+# relative path against the directory of the *first* compose file, so a sibling
+# file layered on top of rhizome's would silently resolve `../` against
+# rhizome/docker/ instead of against here. The only thing the two files really
+# share is the two anchors below -- about six lines -- which is cheaper to
+# duplicate than that class of bug is to debug.
+#
+# Compose project name is derived from this checkout's folder name by the
+# Makefile (COMPOSE_PROJECT_NAME), which keeps this project's containers and
+# volumes distinct from the `rhizome` project that `make box` runs in. They must
+# stay distinct: run.sh passes --remove-orphans, and in a shared project that
+# would tear down a running dev box.
+#
+# RHIZOME_DIR points at the rhizome checkout this box works on -- ../rhizome by
+# default, set by the Makefile, overridable for a second checkout.
 
-# Shared bits factored as YAML anchors. Both app services point at the same
-# Dockerfile and differ only in the `target:` stage (yolo vs box) plus the
-# user/MCP-specific bits the agent container needs. Ollama runs as a sidecar
-# (`ollama` service) that both app services talk to over the compose network,
-# so the binary + model live in one shared volume instead of being installed
-# per app container.
 x-build-args: &build-args
-  WITH_VEC: "${WITH_VEC:-0}"
+  # Which tagged `base` image to build on; see Dockerfile and run.sh. Encodes
+  # WITH_VEC, because that is a build arg to base.
+  BASE_TAG: "${BASE_TAG:-novec}"
 
 x-common-env: &common-env
-  # config.edn (bind-mounted from the repo) is the single source of truth for
-  # :ollama-url. It resolves via aero #or [#env VEC_URL "http://127.0.0.1:11434"];
-  # the Dockerfile sets VEC_URL=http://127.0.0.1:11437 and entrypoint.sh runs
-  # a socat bridge on :11437 -> sidecar :11434, so the same config.edn works
-  # on host (falls back to :11434) and in the container.
-  # PORT / SHADOW_PORT come from the Makefile (which itself reads .envrc /
-  # config.edn / shadow-cljs.edn -- see scripts/detect-ports.sh) and are
-  # forwarded straight through; aero / shadow-cljs read them via #env.
+  # rhizome's config.edn (bind-mounted from the checkout) is the single source
+  # of truth for :ollama-url. It resolves via
+  # aero #or [#env VEC_URL "http://127.0.0.1:11434"]; the base image sets
+  # VEC_URL=http://127.0.0.1:11437 and entrypoint.sh runs a socat bridge on
+  # :11437 -> sidecar :11434, so the same config.edn works on host and in the
+  # container.
+  # PORT / SHADOW_PORT come from the Makefile, which reads them out of the
+  # rhizome checkout via ../rhizome/scripts/detect-ports.sh, and are forwarded
+  # straight through; aero / shadow-cljs read them via #env.
   # sqlite-vec location: config.edn writes
-  # :vec-path #or [#env VEC_PATH "./.sqlite-vec/vec0"], and the Dockerfile
-  # sets VEC_PATH=/usr/local/lib/sqlite-vec/vec0 so the in-container path
-  # wins automatically. Nothing to wire here.
+  # :vec-path #or [#env VEC_PATH "./.sqlite-vec/vec0"], and the base image sets
+  # VEC_PATH=/usr/local/lib/sqlite-vec/vec0 so the in-container path wins
+  # automatically. Nothing to wire here.
   # The server binds 0.0.0.0 automatically when :dev? true (see server.clj),
   # so no RHIZOME_BIND_ALL is needed in the container either.
   PORT: "${PORT}"
@@ -33,11 +41,11 @@ x-common-env: &common-env
   WITH_VEC: "${WITH_VEC:-0}"
 
 services:
-  # Official Ollama image runs serve on entry. The first time the app starts
-  # it asks this sidecar to pull qwen3-embedding:0.6b into ollama_models (see
-  # entrypoint.sh); subsequent runs find the model already cached. Gated by
-  # the `vec` compose profile -- only activated when WITH_VEC=1 (see Makefile)
-  # so users who don't need semsearch never pull this 3 GB image.
+  # Official Ollama image runs serve on entry. The first time the app starts it
+  # asks this sidecar to pull qwen3-embedding:0.6b into ollama_models (see
+  # ../rhizome/docker/entrypoint.sh); subsequent runs find the model already
+  # cached. Gated by the `vec` compose profile -- only activated when WITH_VEC=1
+  # (see Makefile) so runs that don't need semsearch never pull it.
   ollama:
     image: ollama/ollama:latest
     profiles: ["vec"]
@@ -50,69 +58,64 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: yolo
       args: *build-args
     volumes:
       - workspace:/workspace
-      - ../:/workspace/rhizome:rw
-      # ...but not its own cage. The line above is the whole checkout read-write,
-      # and this directory is inside it, so without this an in-box agent can
-      # rewrite the terms it runs under: append a host to tinyproxy.filter, drop
-      # `networks: [locked]` from docker-compose.locked.yml, edit this file. None
-      # of it takes effect immediately -- the running container is already
-      # configured -- but the next `make yolo` reads the edited files, so the
-      # lockdown would last exactly until the box asked for it to stop.
+      - ${RHIZOME_DIR:-../rhizome}:/workspace/rhizome:rw
+      # What the host executes is read-only in the box.
       #
-      # Read-only here rather than absent: the box has good reason to *read*
-      # these (an agent asked about its own sandbox should be able to look), and
-      # `make yolo` itself needs nothing in here writable -- run.sh does its
-      # seeding and staging host-side, before the container exists.
-      #
-      # Note this stops modification, not reading: docker/token still holds the
-      # OAuth token, which the box also has in its environment anyway.
-      - ../docker:/workspace/rhizome/docker:ro
-      # The same reasoning, one step out, for the part that is worse. Everything
-      # `make yolo` runs before the container exists runs on the HOST: the
-      # Makefile itself, then detect-ports.sh and write-compose-ports.sh. Left
-      # writable, a box cannot unlock its own cage any more but it can leave
-      # instructions that the owner's own hand carries out at the next
+      # Everything `make yolo` runs before the container exists runs on the
+      # HOST: this project's Makefile and run.sh, then rhizome's
+      # detect-ports.sh. Left writable, a box cannot unlock its own cage but it
+      # can leave instructions that the owner's own hand carries out at the next
       # `make yolo` -- host code execution, not merely a wider whitelist. Every
-      # other `make` target shells into here too (onboard, start, stop,
-      # run-tests, e2e, install-sqlite-vec), so the whole directory goes.
+      # other `make` target in rhizome shells into scripts/ too (onboard, start,
+      # stop, run-tests, e2e, install-sqlite-vec), so the whole directory goes;
+      # docker/ holds the Dockerfile and entrypoint.sh this image is built from,
+      # so it goes for the same reason.
       #
-      # Nothing writes into scripts/ at runtime, so this costs the box nothing at
-      # run time. What it does cost: an in-box agent can no longer edit these as
+      # Nothing writes into these at runtime, so this costs the box nothing at
+      # run time. What it does cost: an in-box agent can no longer edit them as
       # part of ordinary work, and a `git pull`/merge touching them fails on the
       # read-only mount. Both are host-side jobs here anyway.
       #
       # NOT sealed by this, and worth knowing: deps.edn, package.json and
       # build.clj stay writable because adding a dependency is ordinary in-box
-      # work -- and each is a host-execution path of its own (a new coordinate, an
-      # npm lifecycle script). Same for .claude/skills, which the host's own
-      # agent reads. This is depth, not a boundary; reviewing what the box commits
-      # is still what actually holds.
-      - ../Makefile:/workspace/rhizome/Makefile:ro
-      - ../scripts:/workspace/rhizome/scripts:ro
+      # work -- and each is a host-execution path of its own (a new coordinate,
+      # an npm lifecycle script). Same for .claude/skills, which the host's own
+      # agent reads. This is depth, not a boundary; reviewing what the box
+      # commits is still what actually holds.
+      #
+      # The cage itself is no longer among these: it lives in this repo, which
+      # is not mounted into the box at all. That is a change from when it sat
+      # inside rhizome/docker -- back then the mount had to be read-only rather
+      # than absent, so an agent asked about its own sandbox could still look.
+      # Absent is stronger and is the reason for the split; the cost is that the
+      # box can no longer read its own terms.
+      - ${RHIZOME_DIR:-../rhizome}/Makefile:/workspace/rhizome/Makefile:ro
+      - ${RHIZOME_DIR:-../rhizome}/scripts:/workspace/rhizome/scripts:ro
+      - ${RHIZOME_DIR:-../rhizome}/docker:/workspace/rhizome/docker:ro
       - ./.mcp.json:/workspace/rhizome/.mcp.json:rw
-      # The box gets its own .claude dir, not the repo's (whose
+      # The box gets its own .claude dir, not rhizome's (whose
       # settings.local.json is a symlink into the host dotfiles — dangling in
-      # here). The repo's skills are the one part meant to shine through, so
+      # here). Rhizome's skills are the one part meant to shine through, so
       # they are overlaid back in below the dir mount.
       - ./.claude:/workspace/rhizome/.claude:rw
-      - ../.claude/skills:/workspace/rhizome/.claude/skills:rw
+      - ${RHIZOME_DIR:-../rhizome}/.claude/skills:/workspace/rhizome/.claude/skills:rw
       - ./package-lock.json:/workspace/rhizome/package-lock.json:rw
       # The us-vs-them *checkout*, not the CLI (that one is a single script on
-      # PATH, mounted by the per-machine override). deps.edn names the library
-      # {:local/root "../us-vs-them"} the way the suite names every cross-app
-      # dependency, and tools.deps resolves that relative to the file declaring
-      # it -- so from /workspace/rhizome/deps.edn it has to land at
+      # PATH, mounted by the per-machine override). rhizome's deps.edn names the
+      # library {:local/root "../us-vs-them"} the way the suite names every
+      # cross-app dependency, and tools.deps resolves that relative to the file
+      # declaring it -- so from /workspace/rhizome/deps.edn it has to land at
       # /workspace/us-vs-them, and without this mount every clj invocation in
       # here dies at once with
       #     Local lib eighttrigrams/us-vs-them not found: /workspace/us-vs-them
       # Read-only: the box compiles against its src, it does not develop it.
-      # A clone of rhizome without the sibling checkout beside it will find an
-      # empty dir here and fail that way -- see README, "Getting started".
-      - ../../us-vs-them:/workspace/us-vs-them:ro
+      # Spelled relative to this directory rather than to RHIZOME_DIR, because
+      # in the standard layout rhizome, rhizome-yolo and us-vs-them are all
+      # siblings -- see README, "Layout".
+      - ../us-vs-them:/workspace/us-vs-them:ro
       - m2_cache:/home/claude/.m2
       - npm_cache:/home/claude/.npm
       - claude_home:/home/claude/.claude
@@ -122,41 +125,11 @@ services:
     working_dir: /workspace/rhizome
     environment:
       <<: *common-env
-      # yolo-only: lets the agent invoke `claude`.
+      # Lets the agent invoke `claude`. Read from ./token by run.sh.
       # PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH comes from the image ENV
-      # (Dockerfile yolo stage) -- do not override it here, or the box falls
-      # back to Debian's chromium, which SIGTRAPs under the linuxkit kernel.
+      # (Dockerfile) -- do not override it here, or the box falls back to
+      # Debian's chromium, which SIGTRAPs under the linuxkit kernel.
       CLAUDE_CODE_OAUTH_TOKEN:
-    # `required: false` lets the dependency be silently skipped when the
-    # `vec` profile isn't active (ollama service then isn't part of the
-    # project). Compose v2.20+.
-    depends_on:
-      ollama:
-        condition: service_started
-        required: false
-    stdin_open: true
-    tty: true
-
-  box:
-    hostname: dev-box
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: box
-      args: *build-args
-    volumes:
-      - box_workspace:/workspace
-      - ../:/workspace/rhizome:rw
-      # Same :local/root resolution as the yolo service above, same reason.
-      - ../../us-vs-them:/workspace/us-vs-them:ro
-      - box_m2_cache:/root/.m2
-      - box_npm_cache:/root/.npm
-      - box_cpcache:/workspace/rhizome/.cpcache
-      - box_shadow_cache:/workspace/rhizome/.shadow-cljs
-      - box_node_modules:/workspace/rhizome/node_modules
-    working_dir: /workspace/rhizome
-    environment:
-      <<: *common-env
     # `required: false` lets the dependency be silently skipped when the
     # `vec` profile isn't active (ollama service then isn't part of the
     # project). Compose v2.20+.
@@ -171,25 +144,27 @@ volumes:
   workspace:
   m2_cache:
   npm_cache:
-  claude_home:
-  # The one volume deliberately shared across compose projects rather than
-  # namespaced per checkout. Everything else here is per-project state, but
-  # this holds a downloaded model -- a cache, not state -- and re-pulling
-  # ~640 MB for every sibling checkout buys nothing. `external: true` pins it
-  # to a fixed name instead of `<project>_ollama_models`, and disables
-  # compose's auto-creation with it, so the entry paths run
-  # `docker volume create rhizome_ollama_models` first (ENSURE_OLLAMA_VOLUME
-  # in the Makefile). Idempotent, so an existing populated volume is adopted
-  # as-is.
-  ollama_models:
-    external: true
-    name: rhizome_ollama_models
   cpcache:
   shadow_cache:
   node_modules:
-  box_workspace:
-  box_m2_cache:
-  box_npm_cache:
-  box_cpcache:
-  box_shadow_cache:
-  box_node_modules:
+  # The two volumes that are per *machine* rather than per compose project.
+  #
+  # Everything above holds derived content -- Docker seeds an empty named volume
+  # from the image on first mount, so a fresh project just re-inherits the
+  # Dockerfile's pre-warm. These two do not: one is a downloaded model, the
+  # other is the agent's own home (its sessions, its history, the thing
+  # `claude --resume` reads). Namespacing those per project would mean
+  # re-downloading ~640 MB and throwing away every past session the first time
+  # this box moved house -- which is exactly what splitting it out of rhizome
+  # would otherwise have done.
+  #
+  # `external: true` pins the name and disables compose's auto-creation, so
+  # run.sh runs `docker volume create` for both first. Idempotent, so an
+  # existing populated volume is adopted as-is -- including the ones the
+  # `rhizome` project already had under these very names.
+  claude_home:
+    external: true
+    name: rhizome_claude_home
+  ollama_models:
+    external: true
+    name: rhizome_ollama_models

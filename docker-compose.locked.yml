@@ -1,12 +1,12 @@
 # Compose override that locks the yolo container's outbound traffic to
-# api.anthropic.com only. Applied by docker/run.sh unless it is called as
-# `./run.sh +internet` (see there). Mirrors ../../docker/docker-compose.locked.yml,
+# api.anthropic.com only. Applied by ./run.sh unless it is called as
+# `./run.sh +internet` (see there). Mirrors ../docker/docker-compose.locked.yml,
 # which does the same for the plurama box.
 #
-# Only the `claude` (yolo) service is locked. `box` is deliberately left on the
-# default bridge with open internet: it is the plain root dev shell a human
-# drives, not an agent surface, and CLAUDE.md only ever claimed the internet was
-# cut off for `make yolo`.
+# Nothing over in the rhizome checkout is locked by this, and nothing here
+# reaches it: `make box` there is the plain root dev shell a human drives, not
+# an agent surface, and it stays on the default bridge with open internet. This
+# file only ever governed `make yolo`.
 #
 # Two gates, not one. HTTP(S)_PROXY routes well-behaved tools through tinyproxy,
 # which enforces the whitelist; anything that ignores those vars finds no

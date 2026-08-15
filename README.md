@@ -1,29 +1,123 @@
-# docker-rhizome
+# rhizome-yolo
 
-Run Rhizome dev (and Claude Code) inside an isolated container.
+A sandbox for running [Claude Code](https://claude.com/claude-code) against
+[Rhizome](https://github.com/eighttrigrams/rhizome), with its egress locked to
+`api.anthropic.com` and nothing else.
+
+This repo is *only* the cage. It holds no application code — the code it boxes
+lives in the rhizome checkout next door, which is bind-mounted into the
+container at `/workspace/rhizome`. Nothing in here is ever mounted into the
+box.
+
+Rhizome itself needs none of this: `make box` over there gives you a plain dev
+shell, and that is the supported way in. Reach for this repo only when you want
+an *agent* driving that checkout rather than a person.
+
+## Layout
+
+Three sibling checkouts:
+
+```
+some-parent/
+  rhizome/        the app (github.com/eighttrigrams/rhizome)
+  rhizome-yolo/   this repo
+  us-vs-them/     github.com/eighttrigrams/us-vs-them — rhizome's deps.edn
+                  names it {:local/root "../us-vs-them"}
+```
+
+`../rhizome` is the default; point elsewhere with `make yolo
+RHIZOME_DIR=../rhizome.alt`. `us-vs-them` is expected beside this repo either
+way.
+
+## Getting started
+
+One-time, on the host:
+
+```bash
+claude setup-token          # save the the token it prints line to ./token
+```
+
+`token` is gitignored, and is the only secret this repo touches. Then:
+
+```bash
+make yolo
+claude@yolo-box:/workspace/rhizome$ make onboard   # if you haven't already
+claude@yolo-box:/workspace/rhizome$ claude         # has playwright MCP, can start the app
+```
+
+Everything you do inside the box is rhizome's own Makefile — `make onboard`,
+`make start`, `make test`, `make e2e`. This repo has exactly one target.
+
+The app comes up on the host at `http://localhost:3140`, or wherever rhizome's
+`PORT` resolves to — the ports are read straight out of that checkout by its
+`scripts/detect-ports.sh`, so both sides always agree.
+
+## The optional per-machine layer
+
+Nothing below is needed to run this box, and a fresh clone has none of it. It
+is the hook for whatever a particular machine wants to add.
+
+If a file named exactly `docker-compose.override.yml` exists **in this
+directory**, the Makefile appends it to `COMPOSE_FILE`, last, so it wins.
+Compose only auto-loads an override when `COMPOSE_FILE` is unset — and we
+always set it — so it has to be named explicitly. It is named only when
+present: an entry in `COMPOSE_FILE` that does not exist is a hard error from
+compose, not a skipped file. `$(wildcard)` treats a *dangling symlink* as
+absent too, which is what you want if you symlink it out to a dotfiles repo.
+
+It is gitignored. Keep secrets out of it anyway — it is the kind of file
+people sync.
+
+Two traps, both of which fail **silently**:
+
+- **A bind source that does not exist becomes an empty directory.** Docker
+  creates it rather than erroring, at build time and at run time. So an
+  override that mounts a host script to `/usr/local/bin/plurama-cli` with a
+  wrong absolute path does not fail — it leaves a *directory* at that path,
+  and the command simply is not there. Same for a config file: you get an
+  empty dir where the file should be. If something mounted this way seems
+  absent in the box, check whether it arrived as a directory.
+- **`./CLAUDE.md` in an override resolves against this directory**, not
+  against the override's own location on disk. Compose resolves relative
+  paths against the project directory. So if the override mounts
+  `./CLAUDE.md:/workspace/CLAUDE.md:ro` — the usual way to give the in-box
+  doer its project instructions — then `CLAUDE.md` has to sit *here*, beside
+  the override, however the override itself got here. Miss it and, per the
+  trap above, `/workspace/CLAUDE.md` is an empty directory and the agent
+  starts with no project instructions at all, with nothing in the logs to say
+  so.
+
+An override may also reference host-side helper scripts by absolute path —
+tooling its owner maintains outside both this repo and rhizome. Nothing here
+points at those, by design, and nothing here can check them; the empty-directory
+rule above is the whole failure mode to watch for.
 
 ## What's inside the container
 
-Two images are built from one `Dockerfile`, sharing a `base` stage and picked
-via `target:` in `docker-compose.yml`:
+The image is built in two pieces. The shared half is the `base` stage of
+`../rhizome/docker/Dockerfile` — JDK 21 + `clj`, Node 22 + npm, `bb`, `make`,
+`git`, `sqlite3`, `jq`, `socat`, `lsof`, `imagemagick`, plus the optional
+sqlite-vec install and the entrypoint. `FROM base` cannot cross files, so
+`run.sh` builds that stage out of the rhizome checkout and tags it
+`rhizome-base:vec` / `rhizome-base:novec` (the tag has to encode `WITH_VEC`,
+which is a build arg to that stage), and this repo's `Dockerfile` starts from
+the tag.
 
-- **`box`** (`make box`) — the plain dev shell, as root. `base` and nothing on
-  top of it: JDK 21 + `clj`, Node 22 + npm, `bb`, `make`, `git`, `sqlite3`,
-  `jq`, `socat`, `lsof`, `imagemagick`. `make e2e` from in here fails by design
-  (see `scripts/e2e.sh`) — it needs a browser, which lives in the other image.
-- **`yolo`** (`make yolo`) — the agent surface. Adds Playwright's Chromium, the
-  `claude` CLI (wrapped to always pass `--dangerously-skip-permissions`),
-  `@playwright/mcp`, `postgresql-client`, `openssh-client`, and a non-root
-  `claude` user whose UID/GID match the host's.
+On top of it, the agent surface: Playwright's Chromium, the `claude` CLI
+(wrapped to always pass `--dangerously-skip-permissions`), `@playwright/mcp`,
+`postgresql-client`, `openssh-client`, and a non-root `claude` user whose
+UID/GID match the host's so bind mounts stay writeable.
 
-Then on the host: open `http://localhost:3140` — or whatever `PORT` resolves
-to, if you have moved it (see `scripts/detect-ports.sh`).
-
-## Locked egress (yolo only)
+## Locked egress
 
 `make yolo` runs with its outbound traffic locked; `make yolo INTERNET=1` (or
-`./run.sh +internet`) opts out. `make box` is never locked. Sidecars, brought up
-by `depends_on` in `docker-compose.locked.yml`:
+`./run.sh +internet`) opts out. Two gates, not one: `HTTP(S)_PROXY` routes
+well-behaved tools through tinyproxy, which enforces the whitelist, and
+anything that ignores those vars finds no default gateway at all, because the
+box sits on an `internal: true` network. The second gate is the one that
+actually holds.
+
+Sidecars, brought up by `depends_on` in `docker-compose.locked.yml`:
 
 - **egress** (tinyproxy) — the only route out. Forwards solely to hosts matching
   `tinyproxy.filter`, configured by `tinyproxy.conf`, built from
@@ -57,21 +151,8 @@ make yolo INTERNET=1     # resolve the new deps once, into the live volumes
 or scrub the volumes so the next `make yolo` re-seeds them from a fresh image:
 
 ```bash
-docker volume rm rhizome_m2_cache rhizome_node_modules rhizome_shadow_cache
+docker volume rm rhizome-yolo_m2_cache rhizome-yolo_node_modules rhizome-yolo_shadow_cache
 ```
-
-The `ollama` sidecar (`WITH_VEC=1`) joins `locked` and **not** `outside`, so it
-cannot fetch a model at runtime. Dual-homing it would let anything in the box
-ask it to `POST /api/pull` a name like `some.host/ns/model` — an unauthenticated
-way out past the filter. Seed the model once from open mode instead:
-
-```bash
-make yolo WITH_VEC=1 INTERNET=1    # pulls qwen3-embedding:0.6b into ollama_models
-make yolo WITH_VEC=1               # locked from here on; model served offline
-```
-
-On a cold `ollama_models` volume in locked mode, `entrypoint.sh` logs
-`model pull failed` and continues with semsearch unavailable.
 
 Verify from inside the box:
 
@@ -82,16 +163,36 @@ curl --max-time 5 -sS https://example.com/                            # blocked
 env -u HTTPS_PROXY -u HTTP_PROXY bash -c 'cat < /dev/null > /dev/tcp/1.1.1.1/443'
 ```
 
-## SQLITE Vec
+## Vector search
 
-Off by default. Set `WITH_VEC=1` when building to enable semantic search;
-the image then bundles `sqlite-vec`, Ollama, and the `qwen3-embedding:0.6b`
-model, so semsearch works inside the container with no host-side install.
+Off by default. `make yolo WITH_VEC=1` builds the base stage with `sqlite-vec`
+and brings up an Ollama sidecar holding `qwen3-embedding:0.6b`, so semantic
+search works inside the container with no host-side install.
 
-The model is the one part that lives in a volume rather than the image, so under
-locked egress it has to be seeded once — see "Locked egress" above.
+The model is the one part that lives in a volume rather than the image, and the
+`ollama` sidecar joins `locked` and **not** `outside` — so it cannot fetch one
+at runtime. Dual-homing it would let anything in the box ask it to
+`POST /api/pull` a name like `some.host/ns/model`, an unauthenticated way out
+past the filter. Seed it once from open mode instead:
 
-Vector-dependent tests are tagged `^:vector`. `make test` looks at
-`:semsearch :vec-path` in `config.edn` and adds `--exclude :vector` if
-the dylib it points at isn't on disk. To force-skip even when vec is
-installed, remove the `:semsearch` block from `config.edn`.
+```bash
+make yolo WITH_VEC=1 INTERNET=1    # pulls qwen3-embedding:0.6b into ollama_models
+make yolo WITH_VEC=1               # locked from here on; model served offline
+```
+
+On a cold `ollama_models` volume in locked mode, the entrypoint logs
+`model pull failed` and carries on with semsearch unavailable.
+
+## Volumes
+
+Most of what the box keeps is namespaced per compose project, so a second
+checkout of this repo gets its own. Two are deliberately per *machine*, under
+fixed names, because re-deriving them costs something real:
+
+- `rhizome_ollama_models` — the embedding model, ~640 MB. Shared with
+  rhizome's own `make box WITH_VEC=1`, which declares it the same way.
+- `rhizome_claude_home` — the agent's `/home/claude/.claude`: its sessions and
+  history, which is what `claude --resume` reads.
+
+Both are `external: true`, so `run.sh` runs `docker volume create` for them
+first (idempotent).
