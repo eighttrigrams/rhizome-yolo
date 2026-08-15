@@ -172,7 +172,18 @@ volumes:
   m2_cache:
   npm_cache:
   claude_home:
+  # The one volume deliberately shared across compose projects rather than
+  # namespaced per checkout. Everything else here is per-project state, but
+  # this holds a downloaded model -- a cache, not state -- and re-pulling
+  # ~640 MB for every sibling checkout buys nothing. `external: true` pins it
+  # to a fixed name instead of `<project>_ollama_models`, and disables
+  # compose's auto-creation with it, so the entry paths run
+  # `docker volume create rhizome_ollama_models` first (ENSURE_OLLAMA_VOLUME
+  # in the Makefile). Idempotent, so an existing populated volume is adopted
+  # as-is.
   ollama_models:
+    external: true
+    name: rhizome_ollama_models
   cpcache:
   shadow_cache:
   node_modules:

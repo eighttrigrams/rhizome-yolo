@@ -4,11 +4,20 @@ Run Rhizome dev (and Claude Code) inside an isolated container.
 
 ## What's inside the container
 
-JDK 21 + `clj`, Node + npm, system Chromium for Playwright, `claude` CLI
-(wrapped to always pass `--dangerously-skip-permissions`), `gh`, `make`,
-`postgresql-client`, `lsof`.
+Two images are built from one `Dockerfile`, sharing a `base` stage and picked
+via `target:` in `docker-compose.yml`:
 
-Then on the host: open `http://localhost:3140` (or `:8020`).
+- **`box`** (`make box`) — the plain dev shell, as root. `base` and nothing on
+  top of it: JDK 21 + `clj`, Node 22 + npm, `bb`, `make`, `git`, `sqlite3`,
+  `jq`, `socat`, `lsof`, `imagemagick`. `make e2e` from in here fails by design
+  (see `scripts/e2e.sh`) — it needs a browser, which lives in the other image.
+- **`yolo`** (`make yolo`) — the agent surface. Adds Playwright's Chromium, the
+  `claude` CLI (wrapped to always pass `--dangerously-skip-permissions`),
+  `@playwright/mcp`, `postgresql-client`, `openssh-client`, and a non-root
+  `claude` user whose UID/GID match the host's.
+
+Then on the host: open `http://localhost:3140` — or whatever `PORT` resolves
+to, if you have moved it (see `scripts/detect-ports.sh`).
 
 ## Locked egress (yolo only)
 
