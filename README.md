@@ -34,7 +34,7 @@ way.
 One-time, on the host:
 
 ```bash
-claude setup-token          # save the the token it prints line to ./token
+claude setup-token          # save the token line it prints to ./token
 ```
 
 `token` is gitignored, and is the only secret this repo touches. Then:
