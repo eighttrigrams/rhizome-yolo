@@ -22,7 +22,7 @@ endif
 PORT        ?= $(shell $(RHIZOME_DIR)/scripts/detect-ports.sh PORT)
 SHADOW_PORT ?= $(shell $(RHIZOME_DIR)/scripts/detect-ports.sh SHADOW_PORT)
 
-.PHONY: yolo
+.PHONY: yolo yolo-clean
 
 # When WITH_VEC=1, also activate the `vec` compose profile so the Ollama
 # sidecar starts. Otherwise it stays absent and runs that don't need semsearch
@@ -70,3 +70,31 @@ yolo:
 	@$(RHIZOME_DIR)/scripts/detect-ports.sh check PORT SHADOW_PORT || exit 0; \
 	./write-compose-ports.sh $(PORT) $(SHADOW_PORT) && \
 	$(COMPOSE_ENV) ./run.sh $(YOLO_INTERNET)
+
+# Drop the dependency caches so the next `make yolo` re-seeds them from the
+# image. Needed after anything that changes what the Dockerfile pre-warms --
+# a dependency bump in rhizome's deps.edn, package.json or shadow-cljs.edn,
+# or a new resolver line in the pre-warm itself.
+#
+# Rebuilding alone is NOT enough, and the failure is nasty: Docker copies image
+# content into a named volume only when that volume is EMPTY, so an existing
+# box keeps serving the stale cache while the build reports success. In locked
+# mode the missing artifact then surfaces at runtime as a DNS error against
+# repo1.maven.org, nowhere near the change that caused it.
+#
+# Deliberately NOT touched: the ollama model volume (shared with `make box`,
+# ~900 MB to re-pull, and never seeded from this image anyway) and claude_home
+# (the agent's own config and session history).
+CACHE_VOLUMES = m2_cache node_modules npm_cache shadow_cache cpcache
+
+yolo-clean:
+	@if [ -n "$$(docker ps -q --filter name=^$(COMPOSE_PROJECT_NAME)$$)" ]; then \
+	  echo "The box is still running -- exit it first, or the volumes are in use." >&2; \
+	  exit 1; \
+	fi; \
+	for v in $(CACHE_VOLUMES); do \
+	  docker volume rm "$(COMPOSE_PROJECT_NAME)_$$v" >/dev/null 2>&1 \
+	    && echo "removed $(COMPOSE_PROJECT_NAME)_$$v" \
+	    || echo "skipped $(COMPOSE_PROJECT_NAME)_$$v (absent or in use)"; \
+	done; \
+	echo "Next 'make yolo' re-seeds these from the image."

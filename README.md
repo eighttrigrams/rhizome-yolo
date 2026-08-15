@@ -216,3 +216,33 @@ fixed names, because re-deriving them costs something real:
 
 Both are `external: true`, so `run.sh` runs `docker volume create` for them
 first (idempotent).
+
+### `make yolo-clean` after anything that changes the pre-warm
+
+The cache volumes — `m2_cache`, `node_modules`, `npm_cache`, `shadow_cache`,
+`cpcache` — are filled from the image, by the dependency pre-warm at the end of
+the Dockerfile. That is what lets locked mode run without ever reaching Clojars,
+Maven Central or the npm registry.
+
+**Rebuilding the image does not refresh them.** Docker copies image content into
+a named volume only when that volume is *empty*, so a box that already has these
+volumes keeps serving the old cache while the build reports success. Bump a
+dependency in rhizome's `deps.edn`, `package.json` or `shadow-cljs.edn`, rebuild,
+and the box will still be missing it — surfacing much later as a runtime
+`UnknownHostException: repo1.maven.org`, nowhere near the change that caused it.
+
+So after any such bump:
+
+```bash
+make yolo-clean     # exit the box first; it refuses while the box is running
+make yolo
+```
+
+It leaves `rhizome_ollama_models` and `rhizome_claude_home` alone — the two
+above, which are not seeded from this image and are expensive or irreplaceable.
+
+This is also the only honest way to test the pre-warm. A long-lived cache
+accumulates artifacts from every run that ever had `INTERNET=1`, so a gap in it
+stays invisible on a machine that has been running the box for a while, and
+appears on someone else's first clone. `make yolo-clean` followed by a locked
+`make e2e` is the check that actually means something.

@@ -137,10 +137,20 @@ COPY --chown=${USER_UID}:${USER_GID} .build-stage/vendor              /workspace
 # at runtime on the read-only bind mount in docker-compose.yml.
 COPY --chown=${USER_UID}:${USER_GID} .build-stage/us-vs-them-deps.edn /workspace/us-vs-them/deps.edn
 
-# Four resolvers, because rhizome's runtime deps come from two places that do
-# not know about each other:
-#   `clj -P -M:dev:test:e2e`  the aliases scripts/{start,run-tests}.sh and
-#                             test/playwright.config.ts actually invoke
+# Several resolvers, because rhizome's runtime deps come from two places that
+# do not know about each other:
+#   `clj -P -M:dev`           one line per alias combination that is actually
+#   `clj -P -M:test`          invoked at runtime -- start.sh uses :dev,
+#   `clj -P -M:e2e`           run-tests.sh uses :test and -X:test, and
+#   `clj -P -X:test`          playwright.config.ts's webServer uses :e2e ALONE.
+#   `clj -P -M:dev:test:e2e`  Resolving only the combined set is not enough and
+#                             was a real bug: tools.deps picks one version per
+#                             conflict, so :dev:test:e2e together resolved
+#                             transit-clj to 1.0.333 while :e2e alone wants
+#                             1.0.329. The latter was never fetched, and in
+#                             locked mode `make e2e` then died in the webServer
+#                             with UnknownHostException on repo1.maven.org.
+#                             Each combination must be prepared on its own.
 #   `clj -P -T:build`         :build's own :deps (tools.build)
 #   `npm ci`                  deterministic install from package-lock.json;
 #                             does not consult the registry for a resolution
@@ -158,6 +168,10 @@ COPY --chown=${USER_UID}:${USER_GID} .build-stage/us-vs-them-deps.edn /workspace
 # without the marker every fresh box would emit its failure warning.
 RUN cd /workspace/rhizome \
  && mkdir -p src/cljs resources \
+ && clj -P -M:dev \
+ && clj -P -M:test \
+ && clj -P -M:e2e \
+ && clj -P -X:test \
  && clj -P -M:dev:test:e2e \
  && clj -P -T:build \
  && npm ci --silent --no-audit --no-fund \
