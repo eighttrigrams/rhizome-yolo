@@ -65,7 +65,41 @@ PKG_LOCK_FLAG_SET=0
 if git -C "$RHIZOME_DIR" update-index --skip-worktree package-lock.json 2>/dev/null; then
   PKG_LOCK_FLAG_SET=1
 fi
-trap '[ "$PKG_LOCK_FLAG_SET" = 1 ] && git -C "$RHIZOME_DIR" update-index --no-skip-worktree package-lock.json 2>/dev/null || true' EXIT
+
+# ONE exit trap, doing both jobs. A second `trap ... EXIT` would silently
+# REPLACE this one rather than add to it, and the casualty would be the
+# skip-worktree clear above -- leaving the bit set and host-side npm diffs
+# invisible. So anything else that needs to happen on the way out goes in here.
+#
+# Job two: take the compose project down. `docker compose run --rm` removes
+# only the container it ran; the locked-mode sidecars (egress, ingress,
+# ingress-shadow) carry `restart: unless-stopped` and nothing was taking them
+# down, so they kept holding host PORT/SHADOW_PORT and the next `make yolo`
+# failed to bind. --remove-orphans does NOT cover this: it removes containers
+# whose service is absent from the currently loaded compose files, and in
+# locked mode -- the default -- docker-compose.locked.yml is loaded, so those
+# three are defined services rather than orphans. It only ever helped on a
+# locked-then-open transition.
+#
+# `down` rather than stopping the three by name: it also drops the networks,
+# and it stays correct if a sidecar is ever added. The cost is that the ollama
+# sidecar stops too and has to restart next run -- a few seconds, and the model
+# is in an external volume that `down` does not touch, so nothing is re-pulled.
+CLEANED_UP=0
+cleanup() {
+  [ "$CLEANED_UP" = 1 ] && return 0
+  CLEANED_UP=1
+  [ "$PKG_LOCK_FLAG_SET" = 1 ] && \
+    git -C "$RHIZOME_DIR" update-index --no-skip-worktree package-lock.json 2>/dev/null
+  docker compose down --remove-orphans >/dev/null 2>&1
+  return 0
+}
+trap cleanup EXIT
+# ctrl+c / SIGTERM: run the same cleanup, then leave with the conventional
+# status. Without these the shell can die on the signal without the EXIT trap
+# ever running, which is how ctrl+c used to leave sidecars behind.
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 EXTRA_VOLUMES=()
 PARENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -142,9 +176,16 @@ docker build --target base \
 docker compose build "${BUILD_SERVICES[@]}" || exit $?
 # --use-aliases: publishes the service's network alias (`claude`) so the socat
 # ingress sidecars can resolve and forward to it in locked mode. Harmless open.
-# --remove-orphans: the locked-mode sidecars carry `restart: unless-stopped` and
-# survive `--rm`, so without this they keep holding the host ports and the next
-# run fails to bind. Safe only because this is its own compose project -- see
-# the header of docker-compose.yml.
+# --remove-orphans: clears containers left by a *different* mode -- the
+# locked-mode sidecars are orphans when this runs open. What takes them down in
+# locked mode is the exit trap above, not this flag.
+# --name: a fixed, memorable container name instead of compose's
+# `<project>-claude-run-<random hex>`. Two knock-ons, both wanted: the
+# blocked-port message in rhizome's detect-ports.sh tells you to
+# `docker stop <name>`, which is now something a human can type; and a second
+# concurrent `make yolo` fails immediately with "container name is already in
+# use" rather than quietly starting a second box. `--rm` still removes the
+# container on exit, so the name is free again for the next run.
 docker compose run --rm --service-ports --use-aliases --remove-orphans \
+  --name rhizome-yolo \
   "${EXTRA_VOLUMES[@]}" claude

@@ -19,6 +19,14 @@ FROM rhizome-base:${BASE_TAG}
 ARG USER_UID=501
 ARG USER_GID=20
 
+# Block `git push` from inside the container. This belongs here and not in
+# `base`: the plain dev box a human drives should not silently refuse to push,
+# but an agent should, because pushing is the one git operation whose blast
+# radius leaves the machine. Committing and merging (including on main) stay
+# allowed -- in-box commits are traceable via the git identity baked in below.
+RUN printf '#!/bin/sh\ncase "$1" in\n  push)\n    echo "git push is disabled inside the docker container." >&2\n    exit 1\n    ;;\nesac\nexec /usr/bin/git "$@"\n' > /usr/local/bin/git \
+ && chmod +x /usr/local/bin/git
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     postgresql-client \
