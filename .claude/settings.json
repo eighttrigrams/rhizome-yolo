@@ -2,17 +2,5 @@
   "autoMemoryEnabled": false,
   "enabledMcpjsonServers": [
     "playwright"
-  ],
-  "enabledPlugins": {
-    "clj-nrepl-eval@eighttrigrams": true,
-    "log-tool-calls@eighttrigrams": false
-  },
-  "extraKnownMarketplaces": {
-    "eighttrigrams": {
-      "source": {
-        "source": "directory",
-        "path": "/workspace/claude-stuff"
-      }
-    }
-  }
+  ]
 }
