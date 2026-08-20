@@ -186,6 +186,13 @@ docker compose build "${BUILD_SERVICES[@]}" || exit $?
 # concurrent `make yolo` fails immediately with "container name is already in
 # use" rather than quietly starting a second box. `--rm` still removes the
 # container on exit, so the name is free again for the next run.
+#
+# The name is the hostname, deliberately not the compose project. The project
+# is already `rhizome-yolo` (it is the directory name), and giving the container
+# that same string makes Docker Desktop show two rows both reading
+# "rhizome-yolo" -- the stack and the container inside it -- indistinguishable
+# at a glance. BOX_NAME comes from the Makefile so the yolo-clean guard tests
+# the same name; the default keeps this script runnable on its own.
 docker compose run --rm --service-ports --use-aliases --remove-orphans \
-  --name rhizome-yolo \
+  --name "${BOX_NAME:-yolo-box}" \
   "${EXTRA_VOLUMES[@]}" claude

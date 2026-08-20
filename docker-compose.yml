@@ -95,11 +95,24 @@ services:
       - ${RHIZOME_DIR:-../rhizome}/Makefile:/workspace/rhizome/Makefile:ro
       - ${RHIZOME_DIR:-../rhizome}/scripts:/workspace/rhizome/scripts:ro
       - ${RHIZOME_DIR:-../rhizome}/docker:/workspace/rhizome/docker:ro
-      - ./.mcp.json:/workspace/rhizome/.mcp.json:rw
+      # Claude Code's project root is /workspace, not the rhizome checkout --
+      # see `working_dir` below -- and it discovers .mcp.json and .claude from
+      # the directory it starts in. So these live at /workspace, or the agent
+      # comes up with no playwright MCP server and none of rhizome's skills.
+      # /workspace is also where the per-machine override mounts CLAUDE.md, so
+      # all three of the agent's config sources sit at the same root.
+      - ./.mcp.json:/workspace/.mcp.json:rw
       # The box gets its own .claude dir, not rhizome's (whose
       # settings.local.json is a symlink into the host dotfiles — dangling in
       # here). Rhizome's skills are the one part meant to shine through, so
       # they are overlaid back in below the dir mount.
+      - ./.claude:/workspace/.claude:rw
+      - ${RHIZOME_DIR:-../rhizome}/.claude/skills:/workspace/.claude/skills:rw
+      # The same pair again over the checkout, for a `cd rhizome && claude`.
+      # Same host sources, so the two roots cannot drift; without them that
+      # invocation would read rhizome's own .claude and hit the dangling
+      # settings.local.json symlink described above.
+      - ./.mcp.json:/workspace/rhizome/.mcp.json:rw
       - ./.claude:/workspace/rhizome/.claude:rw
       - ${RHIZOME_DIR:-../rhizome}/.claude/skills:/workspace/rhizome/.claude/skills:rw
       - ./package-lock.json:/workspace/rhizome/package-lock.json:rw
@@ -122,7 +135,13 @@ services:
       - cpcache:/workspace/rhizome/.cpcache
       - shadow_cache:/workspace/rhizome/.shadow-cljs
       - node_modules:/workspace/rhizome/node_modules
-    working_dir: /workspace/rhizome
+    # /workspace, not the checkout: the agent's project root is the whole
+    # workspace -- rhizome beside us-vs-them and whatever sibling checkouts
+    # run.sh found -- and that is where its CLAUDE.md, .claude and .mcp.json
+    # are mounted. rhizome's own targets still want to run from the checkout,
+    # so `make test` and friends are a `cd rhizome` away. Overrides the base
+    # image's WORKDIR.
+    working_dir: /workspace
     environment:
       <<: *common-env
       # Lets the agent invoke `claude`. Read from ./token by run.sh.
